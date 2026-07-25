@@ -1,0 +1,6 @@
+title = "gitleaks"
+[extend]
+useDefault = true
+# Add per-repo allowlist paths/regexes here for INTENTIONAL synthetic secrets (test fixtures).
+# [allowlist]
+# paths = ['''tests/.*''']

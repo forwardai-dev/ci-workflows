@@ -1,0 +1,13 @@
+name: ci
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  ci:
+    uses: forwardai-dev/ci-workflows/.github/workflows/full.yml@v1
+    with:
+      package-name: "your_pkg"      # enables the coverage gate; "" to disable
+      src-paths: "src"
+      lint-paths: "src tests"
+      coverage-min: 90
+      run-docs-sync: false          # true if the repo ships scripts/check_docs_sync.py
