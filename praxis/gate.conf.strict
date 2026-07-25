@@ -1,0 +1,9 @@
+# Strict praxis-gate profile — wires the full ci-workflows scanner set into the LOCAL
+# build-time gate, so quality holds throughout the build (no refactor at deploy).
+# Copy to <project>/.praxis/gate.conf. praxis-gate reads LINT_CMD/TYPECHECK_CMD/TEST_CMD
+# + COVERAGE_MIN + STRICT_CVE; this maxes them and chains the extra scanners into LINT_CMD.
+COVERAGE_MIN=90
+STRICT_CVE=1
+LINT_CMD="ruff check src tests && ruff format --check src tests && pylint src --fail-under=9.0 && bandit -rq src -c pyproject.toml && semgrep --config=auto --error --quiet src tests && gitleaks detect --source . $([ -f .gitleaks.toml ] && echo --config .gitleaks.toml) --redact"
+TYPECHECK_CMD="mypy src && pyright src"
+TEST_CMD="PYTHONPATH=src python3 -m pytest tests -q --cov=PKG --cov-fail-under=90"
