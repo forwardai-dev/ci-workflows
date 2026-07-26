@@ -66,6 +66,14 @@ on:
         description: 'Python version for the single-run quality job'
         type: string
         default: '3.12'
+      run-pyright:
+        description: 'Run pyright type check (advisory; toggle off per repo while adopting)'
+        type: boolean
+        default: true
+      run-semgrep:
+        description: 'Run semgrep SAST (advisory; toggle off per repo while adopting)'
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -102,6 +110,7 @@ jobs:
       - name: Types (mypy)
         run: mypy ${{ inputs.src-paths }}
       - name: Types (pyright)
+        if: ${{ inputs.run-pyright }}
         run: pyright ${{ inputs.src-paths }}
 
       - name: SAST (bandit)
@@ -112,6 +121,7 @@ jobs:
             bandit -r ${{ inputs.src-paths }}
           fi
       - name: SAST (semgrep)
+        if: ${{ inputs.run-semgrep }}
         run: semgrep --config=auto --error --quiet ${{ inputs.lint-paths }}
       - name: Secrets (gitleaks)
         run: |
