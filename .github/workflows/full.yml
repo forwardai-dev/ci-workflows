@@ -74,6 +74,10 @@ on:
         description: 'Run semgrep SAST (advisory; toggle off per repo while adopting)'
         type: boolean
         default: true
+      run-osv-hard:
+        description: 'Hard-fail on osv-scanner dep vulns. false = advisory (surfaced, non-blocking) — dep CVEs are triage-not-block during adoption.'
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -149,7 +153,7 @@ jobs:
       - name: Dependency vulns (osv-scanner)
         run: |
           curl -sSL https://github.com/google/osv-scanner/releases/download/v1.9.1/osv-scanner_linux_amd64 -o osv-scanner && chmod +x osv-scanner
-          ./osv-scanner scan --recursive .
+          ./osv-scanner scan --recursive . || [ "${{ inputs.run-osv-hard }}" = "false" ]
       - name: Dependency audit (pip-audit, advisory)
         run: pip-audit || true
 
