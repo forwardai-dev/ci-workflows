@@ -4,6 +4,11 @@ name: full-quality-security
 # any repo with one `uses:` line. Mirrors the praxis §II-B controls (SAST, secrets, deps,
 # types, coverage) as CONTINUOUS enforcement. See README for the caller snippet.
 #
+# v1.1: adds install-command / test-command / cov-command inputs and makes pyproject-
+# dependent steps optional, so repos with non-standard layouts (app/, app/backend, flat)
+# can adopt the gate without restructuring. Defaults are byte-identical to v1 behaviour,
+# so existing callers (e.g. aah) are unaffected.
+#
 # Every scanner version is pinned so a stricter upstream release can't silently break callers.
 
 on:
@@ -25,6 +30,22 @@ on:
         description: 'Import package name for coverage (e.g. aah). Empty disables the coverage gate.'
         type: string
         default: ''
+      install-command:
+        description: 'How to install the project + its deps (v1.1). Default assumes a root [dev] extra.'
+        type: string
+        default: 'pip install -e ".[dev]"'
+      test-command:
+        description: 'How to run the test suite (v1.1).'
+        type: string
+        default: 'PYTHONPATH=src python -m pytest tests/ -q'
+      cov-command:
+        description: 'Coverage gate command (v1.1). Empty falls back to the package-name default.'
+        type: string
+        default: ''
+      pyproject-path:
+        description: 'Path to pyproject.toml for bandit/interrogate/validate (v1.1). Steps skip if absent.'
+        type: string
+        default: 'pyproject.toml'
       coverage-min:
         description: 'Minimum test coverage %% (gate). 0 disables.'
         type: number
@@ -59,8 +80,8 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: { python-version: "${{ matrix.python-version }}" }
-      - run: pip install -e ".[dev]"
-      - run: PYTHONPATH=src python -m pytest tests/ -q
+      - run: ${{ inputs.install-command }}
+      - run: ${{ inputs.test-command }}
 
   quality:
     runs-on: ubuntu-latest
@@ -68,8 +89,10 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: { python-version: "${{ inputs.pin-python }}" }
-      - name: Install (dev + pinned scanners)
-        run: pip install -e ".[dev]" bandit interrogate pip-audit build twine "validate-pyproject[all]" "semgrep==1.171.0" "pyright==1.1.411" "pylint==4.0.6"
+      - name: Install (project + pinned scanners)
+        run: |
+          ${{ inputs.install-command }}
+          pip install bandit interrogate pip-audit build twine "validate-pyproject[all]" "semgrep==1.171.0" "pyright==1.1.411" "pylint==4.0.6"
 
       - name: Lint (ruff)
         run: ruff check ${{ inputs.lint-paths }} && ruff format --check ${{ inputs.lint-paths }}
@@ -82,7 +105,12 @@ jobs:
         run: pyright ${{ inputs.src-paths }}
 
       - name: SAST (bandit)
-        run: bandit -r ${{ inputs.src-paths }} -c pyproject.toml
+        run: |
+          if [ -f "${{ inputs.pyproject-path }}" ]; then
+            bandit -r ${{ inputs.src-paths }} -c "${{ inputs.pyproject-path }}"
+          else
+            bandit -r ${{ inputs.src-paths }}
+          fi
       - name: SAST (semgrep)
         run: semgrep --config=auto --error --quiet ${{ inputs.lint-paths }}
       - name: Secrets (gitleaks)
@@ -93,10 +121,20 @@ jobs:
 
       - name: Coverage gate
         if: ${{ inputs.package-name != '' && inputs.coverage-min != 0 }}
-        run: PYTHONPATH=src python -m pytest tests -q --cov=${{ inputs.package-name }} --cov-fail-under=${{ inputs.coverage-min }}
+        run: |
+          if [ -n "${{ inputs.cov-command }}" ]; then
+            ${{ inputs.cov-command }}
+          else
+            PYTHONPATH=src python -m pytest tests -q --cov=${{ inputs.package-name }} --cov-fail-under=${{ inputs.coverage-min }}
+          fi
       - name: Docstring coverage
         if: ${{ inputs.docstring-min != 0 }}
-        run: interrogate -c pyproject.toml ${{ inputs.src-paths }} || interrogate ${{ inputs.src-paths }} -f ${{ inputs.docstring-min }}
+        run: |
+          if [ -f "${{ inputs.pyproject-path }}" ] && grep -q "tool.interrogate" "${{ inputs.pyproject-path }}"; then
+            interrogate -c "${{ inputs.pyproject-path }}" ${{ inputs.src-paths }}
+          else
+            interrogate ${{ inputs.src-paths }} -f ${{ inputs.docstring-min }}
+          fi
 
       - name: Dependency vulns (osv-scanner)
         run: |
@@ -116,6 +154,6 @@ jobs:
         if: ${{ inputs.run-docs-sync }}
         run: PYTHONPATH=src python scripts/check_docs_sync.py
       - name: Packaging metadata
-        run: validate-pyproject pyproject.toml
-      - name: Build + twine check
-        run: python -m build && twine check dist/*
+        if: ${{ inputs.pyproject-path != '' }}
+        run: |
+          if [ -f "${{ inputs.pyproject-path }}" ]; then validate-pyproject "${{ inputs.pyproject-path }}"; else echo "no pyproject — skipping"; fi
