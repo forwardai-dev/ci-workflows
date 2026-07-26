@@ -92,7 +92,7 @@ jobs:
       - name: Install (project + pinned scanners)
         run: |
           ${{ inputs.install-command }}
-          pip install bandit interrogate pip-audit build twine "validate-pyproject[all]" "semgrep==1.171.0" "pyright==1.1.411" "pylint==4.0.6"
+          pip install ruff==0.9.6 mypy==1.15.0 bandit interrogate pip-audit build twine "validate-pyproject[all]" "semgrep==1.171.0" "pyright==1.1.411" "pylint==4.0.6"
 
       - name: Lint (ruff)
         run: ruff check ${{ inputs.lint-paths }} && ruff format --check ${{ inputs.lint-paths }}
